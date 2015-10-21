@@ -1,0 +1,273 @@
+from __future__ import division
+import operator
+import numpy
+import scipy.integrate as integrate
+import matplotlib.pyplot as pyplot
+import math
+from scipy.optimize import curve_fit
+
+def createlists():
+    
+    '''takes the file with the supernovae data for z<0.1 and puts it into three
+    lists one for the peak magnitudes, one for the peak magnitude errors and one
+    for redshift outputs are these three lists'''
+    
+    data = open('super.txt','r')
+    lines = data.readlines()
+
+    z=[]
+    m_obs=[]
+    m_obs_error=[]
+
+    for i in range(18):
+        line=lines[47+i]
+        m_obs_error.append(float(line[-6:-2]))
+        m_obs.append(float(line[-12:-7]))
+        z.append(float(line[-18:-13]))
+    
+    return m_obs_error, m_obs, z
+    
+    
+#set global variables    
+createlists()
+m_obs_error = createlists()[0]
+m_obs = createlists()[1]
+z = createlists()[2]
+
+  
+def f_to_m(f): 
+    '''converts magnitudes to fluxes'''
+    
+    m = -27.9 -2.5*math.log(f, 10)
+   
+    return m  
+    
+    
+
+
+
+def m_mod_list(Lp, z):
+    '''takes one Lpeak value and a list of redshifts, it then uses equation 1 to
+    output a list of model magnitude values'''
+    #input Lp in units of solar luminosities *10**(-6) 
+    
+    m_mod = []
+    
+    for i in range(len(z)):
+        
+        const=3.846e26*2.43e-18**2/(4*numpy.pi*3e08**2)
+        val_f = const*Lp/(z[i]**2*(1+z[i])**2) 
+        val_m=f_to_m(val_f)
+        m_mod.append(val_m)
+
+    return m_mod
+#print m_mod_list(5000, z)    
+
+#def m_to_f(m):
+#    '''converts magnitudes to fluxes, takes a single magnitude and returns a
+#    single flux using equation 2'''
+#    
+#    f = 10**((-7.052-m)/2.5)
+#    
+#    return f
+    
+
+    
+
+
+#def f_obs_list(m_obs):
+#    '''takes the list of observed magnitudes and turns them all into fluxes, 
+#    outputting a list of fluxes'''
+    
+#    f_obs=[]
+    
+    
+#    for i in range(len(m_obs)):
+#        val = m_to_f(float(m_obs[i]))
+#        f_obs.append(val)
+        
+#    return f_obs
+       
+
+def x_2(m_obs, m_mod, m_obs_error):
+    '''takes a list of observed fluxes and a list of modelled fluxes and 
+    calculates the x2 statistic for them, outputting the single x2 value'''
+    
+    total=0
+    
+    for i in range(len(m_obs)):
+        total += (m_obs[i] - m_mod[i])**2/((m_obs_error[i])**2)
+       
+    return total
+  
+   
+def find_min(Lp, m_obs, z):
+    '''takes a list of 10 trial Lpeak values and calculates the x_2 statsistic 
+    for each one, creating a list of 10 x_2 values. The lowest of these values
+    is then located and returned, along with its corresponding index '''
+    
+    x_2_list = []
+    
+    for i in range(len(Lp)):
+        m_mod = m_mod_list(Lp[i], z) #outputs list of f_mods with that Lpeak
+        x_2_val = x_2(m_obs, m_mod, m_obs_error) #calculates one value for each Lpeak
+        x_2_list.append(x_2_val) #adds this value to the list
+
+    min_index, min_value = min(enumerate(x_2_list), key=operator.itemgetter(1))
+    #finds the minimum value of x_2 in the list and its index
+    
+    return min_value, min_index #returns the value of x_2 and its index
+                                                                              
+Lp=[10, 100, 1000, 5000, 5e4, 6e5, 7e6, 8e7, 9e10, 10e20]
+#print find_min(Lp, m_obs, z)[1] 
+
+                                                                                                                                                          
+def find_Lpeak(Lp, m_obs, z):
+    '''finds the optimum value of lpeak by starting with 10 guesses, finding 
+    the best out of those, then making another 10 guesses however this time
+    the start guess is the value before the initial best value of Lpeak and the
+    last the value after it. This process is repeated 5 times. the function 
+    returns the optimum value of Lpeak and the x_2 value corresponding to it
+    INITIAL GUESS VALUES OF LP MUST ENCLOSE ACTUAL VALUE. LP LIST MUST BE IN 
+    ACENDING ORDER'''
+    
+    for i in range(15):
+    
+        min_index = find_min(Lp, m_obs, z)[1] #find index of best Lp in this set 
+        min_value = find_min(Lp, m_obs, z)[0] 
+   
+        step = (Lp[min_index+1]-Lp[min_index-1])/10 #find what the step between values should be for the next set   
+        Lp = numpy.arange(Lp[min_index-1], (Lp[min_index+1]+step), step).tolist()
+        
+      
+    return min_value, min_index, Lp[min_index]
+    
+#print find_Lpeak(Lp, m_obs, z)[1], find_Lpeak(Lp, m_obs, z)[0], find_Lpeak(Lp, m_obs, z)[2]
+                         
+
+
+def m_obs_error_to_list(m_obs_error):
+    '''takes list of errors and turns each value from a string to a float'''
+    
+    m_obs_error_new=[]
+    
+    for i in range(len(m_obs_error)):
+       
+        m_obs_error_new.append(float(m_obs_error[i]))
+        
+    return m_obs_error_new
+        
+        
+#print find_Lpeak(Lp, m_obs, z)[0]
+Lp_final = find_Lpeak(Lp, m_obs, z)[2]
+
+def final_m_mag(z):
+    '''crates list of final magnitudes using final value of Lpeak'''
+    
+    m_mod_vals = m_mod_list(find_Lpeak(Lp, m_obs, z)[2], z)
+        
+    return m_mod_vals
+
+
+m_mod = final_m_mag(z)
+m_obs_error_new = m_obs_error_to_list(m_obs_error)
+
+pyplot.figure()  
+pyplot.scatter(z, m_obs, color = 'red')
+pyplot.scatter(z, m_mod)
+pyplot.errorbar(z, m_obs, yerr = m_obs_error_new, ls='none')#xhange to just obs error ??**
+#pyplot.show() 
+
+
+def createlists_L():    
+    '''takes the file with the supernovae data for z>0.1 and puts it into three
+    lists one for the peak magnitudes, one for the peak magnitude errors and one
+    for redshift outputs are these three lists'''
+    
+    data = open('super.txt','r')
+    lines = data.readlines()
+
+    z_L=[]
+    m_obs_L=[]
+    m_obs_error_L=[]
+
+    for i in range(42):
+        line=lines[2+i]
+        m_obs_error_L.append(float(line[-6:-2]))
+        m_obs_L.append(float(line[-12:-7]))
+        z_L.append(float(line[-18:-13]))
+    
+    return m_obs_error_L, m_obs_L, z_L
+    
+    
+z_L=createlists_L()[2]
+m_obs_L=createlists_L()[1]
+m_obs_error_L=createlists_L()[0]    
+z_La = numpy.array(z_L)
+m_obs_La = numpy.array(m_obs_L)
+m_obs_error_La = numpy.array(m_obs_error_L)
+
+print z_La
+def f_to_ma(f): 
+    '''converts magnitudes to fluxes'''
+    m = numpy.zeros((len(f)))
+    for i in range(len(f)):
+    
+        mval = -27.9 -2.5*math.log(f[i], 10)
+        m[i] = mval
+        
+   
+    return m  
+
+  
+def integration(z_L, Q):
+    '''takes a single value of z_l and a single value of Q and performs
+    numerical integration on equation 3 to output the evaluated integral'''
+    z_L.tolist()
+    listz=[]
+
+    for i in range(len(z_L)):
+        z=z_L[i]
+        f = lambda z : 1/((1-Q)*(1+z)**3+Q)**(1/2)
+        I = integrate.quad(f, 0, z)
+        listz.append(I[0])
+    arrayz = numpy.array(listz)
+    return arrayz
+    
+
+def equation(z_Ls, Q, Lp_final):
+    '''evaluates equation 4, then changes the values from fluxes to magnitudes
+    to be fitted for below'''
+   
+    c=3e8
+    Ho=2.43e-18  
+    m_mod_L = f_to_ma((integration(z_Ls, Q))**(-2)*Lp_final*Ho**2/ (c**2*4*numpy.pi*(1+(z_Ls)**2))) 
+    return m_mod_L
+
+popt, pcov = curve_fit(equation, z_La, m_obs_La, (0.5,1), m_obs_error_La)
+#print popt
+
+def m_mod_list_L(z_L, Q, Lp_final):
+    '''takes a list of z_l values and evaluates equation 4 for each of them, 
+    using the integration function, it then outputs a list of model flux
+    values'''
+    
+    m_mod_L_list=[]
+    c=3e8
+    Ho=2.43e-18
+    
+    for i in range(len(z_L)):  
+        f_mod_L = (integration(z_L[i], Q))**(-2)*Lp_final*Ho**2/ (c**2*4*numpy.pi*(1+(z_L[i])**2))
+        m_mod_L_list.append(f_to_m(f_mod_L))
+        
+    return m_mod_L_list
+    
+
+m_mod_final_vals = m_mod_list_L(z_L, popt, Lp_final)
+
+pyplot.figure()  
+pyplot.scatter(z_L, m_obs_L, color = 'red')
+pyplot.scatter(z_L, m_mod_final_vals)
+pyplot.errorbar(z_L, m_obs_L, yerr = m_obs_error_L, ls='none')
+pyplot.show() 
+                                                                                                                                    
